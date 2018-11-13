@@ -6,36 +6,43 @@ from maze_recursive_division import generateMaze
 
 def init(t_nrow, t_ncol, t_nAction=4):
     r"""
-            |   UP      Right       LEFT    DOWN
+            |   DOWN      Right       LEFT      UP
     --------|----------------------------------------
     (0, 0)  |
     (0, 1)  |
     (., .)  |
     """
     nState = t_nrow * t_ncol
+    # initialize Q table
     Qtable = np.zeros((nState, t_nAction), dtype=np.float32)
-
+    
+    # an array for "state_idx --> pixel position"
     States = np.empty((nState,2), np.int16)
     for i in range(t_nrow):
         for j in range(t_ncol):
             index = i * t_ncol + j
             States[index] = i, j
-
+    
+    # an array for "choice --> position increment"
     movements = np.array([[+1,0], [0,+1], [0,-1], [-1,0]], np.int16)
-
+    
+    # an array for "maze pixel value --> reward"
     rewards = np.array([-100,-1000,+1000,+1], np.int16)
 
     return Qtable, movements, States, rewards
 
 def move(QTable_row, t_pos, t_movements, eps=0.9):
-    greedy = np.random.randint(low=1, high=11, size=1)[0]
-
-    #if greedy > 9 or (QTable_row[:] == 0).all():
-    if (QTable_row[:] == 0.).all():
+    r"""
+    modify t_pos and return choice
+    """
+    # if all 4 value in a row are all 0, then pick choice randomly 
+    if (QTable_row[:] == 0.).all(): # in this case it seems that eps-greedy is unnecessary 
         choice = np.random.randint(low=0, high=QTable_row[:].size, size=1)[0]
+    # else pick the one with largest QTable value
     else:
         choice = QTable_row[:].argmax()
 
+    # modify position
     t_pos += t_movements[choice, :]
 
     return choice
@@ -57,9 +64,13 @@ def playAGame(t_Param, t_Qtable, t_Movements, t_States, t_Rewards, t_Maze, t_lin
     end     |   2                   +1000
     road    |   3                   +1
     """
-
+    # start from the position next to the entrance of maze.
     pos = np.array([1,1], np.int16)
+    
+    # a list to memorize history step with maximum memory length of 2
     path = [0,0]
+    
+    # update plot
     if t_line is not None and t_point is not None:
         xdata = [pos[1],]; ydata = [pos[0],]
         t_line.set_xdata(xdata); t_line.set_ydata(ydata)
@@ -88,10 +99,13 @@ def playAGame(t_Param, t_Qtable, t_Movements, t_States, t_Rewards, t_Maze, t_lin
         # calculate new state index
         state_idx_new = t_Param["ncol"] * pos[0] + pos[1]
         #print(f"[{pos[0]:>2d}, {pos[1]:2d}]", end="  ")
-        # get evvironment; based on the new position, get reward
+        # get environment; based on the new position, get reward
         env = t_Maze[pos[0], pos[1]]
+        
+        # if is turning back, punish
         if state_idx_new in path:
             R = -2
+        # get reward from the Maze pixel value of the new state
         else:
             R = t_Rewards[ env ]
 
@@ -108,14 +122,12 @@ def playAGame(t_Param, t_Qtable, t_Movements, t_States, t_Rewards, t_Maze, t_lin
             break
 
     step = k+1
-
+    
+    # if reach maximum nStep, set env to 4
     if step == t_Param["nStep_Max"]:
         env = 4
 
     return env, step, tuple(pos)
-
-
-
 
 
 if __name__ == "__main__":
@@ -134,7 +146,6 @@ if __name__ == "__main__":
 
     # Display the image
     from matplotlib import pyplot as plt
-    plt.ion()
     plt.imshow(Maze, interpolation='none')
     line, = plt.plot([], [], "-", linewidth=1, color="red")
     point, = plt.plot([], [], "o", linewidth=1, color="red")
@@ -142,14 +153,17 @@ if __name__ == "__main__":
 
     #print(set(Maze.reshape(-1).tolist()))
     Qtable, Movements, States, Rewards = init(Param["nrow"], Param["ncol"], t_nAction=4)
-
+    
     nstep_old = 0
     for g in range(Param["nGame"]):
-        #break
+        #break  # turn off learning
         env, step_collapse, final_pos = playAGame(Param, Qtable, Movements,
                             States, Rewards, Maze, t_line=line, t_point=point)
+        
+        # print out the final state, collapsed step and final position
         print(env, step_collapse, final_pos)
-
+        
+        # if reaching goal with a constant number of step, quit learning.
         if env == 2 and step_collapse == nstep_old:
             break
         else:
